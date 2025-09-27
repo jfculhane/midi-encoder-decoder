@@ -14,4 +14,4 @@ bpm=120.0, ticks_per_beat=480, program=101
 The program uses the general midi assignments found here: https://en.wikipedia.org/wiki/General_MIDI
 You must subtract the midi assignment by 1 so the listing of 102 is 101 in the script. Goblins. 
 
-Septembner 2025 - GC NEW MEDIA LLC
+September 2025 - GC NEW MEDIA LLC
