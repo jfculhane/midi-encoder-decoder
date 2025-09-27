@@ -1,6 +1,6 @@
 # midi-encoder-decoder
 This is a simple midi parser that first creates a text array of 250 random notes with the script rnd250-d.py 
-Then a second script takes the output: midi_sequence.txt and coverts it into a .mid binary using mido. That script is called texttomidi3.py. The output is output.mid
+Then a second script takes the output: midi_sequence.txt and coverts it into a .mid binary using mido. That script is called texttomidi3.py. The output is output.mid.
 A third script coverts the midi file back to a .csv file. That script is miditotext3.py. The output is output.csv
 
 See the example-outputs folder for outputs. 
