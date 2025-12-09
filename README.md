@@ -6,7 +6,7 @@ A third script coverts the midi file back to a .csv file. That script is miditot
 See the example-outputs folder for outputs. 
 
 Customization:
-The current random generator randomizes the lenth of the notes from 1 to 10. 
+The current random generator randomizes the length of the notes from 1 to 10. 
 It also limits the random note from 1 to 60 instead of the full 127 midi notes.
 
 The instrument program assignment and speed is in the texttomidi3.py script 
