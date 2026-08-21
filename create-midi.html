@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text → MIDI</title>
+<style>
+  :root{
+    --bg: #eef0ea;
+    --panel: #ffffff;
+    --panel-border: #d7dad0;
+    --grid: #e2e5db;
+    --text: #1b1c19;
+    --text-dim: #6c6f66;
+    --amber: #c9821f;
+    --teal: #2f8f86;
+    --red: #c14a3a;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+  }
+  body {
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+    background-color: var(--bg);
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 28px;
+  }
+  nav.tabs a {
+    text-decoration: none;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    padding: 8px 14px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+  }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.active {
+    background: var(--panel);
+    border-color: var(--panel-border);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  header { margin-bottom: 32px; }
+  .eyebrow {
+    color: var(--amber);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--amber);
+  }
+  h1 { font-size: 26px; margin: 0 0 10px; font-weight: 600; letter-spacing: -0.01em; }
+  header p {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 0;
+    max-width: 58ch;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+
+  .drop {
+    border: 1.5px dashed var(--panel-border);
+    border-radius: 8px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .drop:hover, .drop.drag { border-color: var(--amber); background: rgba(201,130,31,0.05); }
+  .drop input { display: none; }
+  .drop-icon { font-size: 22px; color: var(--text-dim); margin-bottom: 10px; letter-spacing: 0.3em; }
+  .drop-main { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+  .drop-sub { font-size: 12px; color: var(--text-dim); }
+  .filename-tag {
+    display: none;
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: var(--teal);
+    background: rgba(47,143,134,0.08);
+    border: 1px solid rgba(47,143,134,0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 11px 20px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: opacity .15s ease, transform .05s ease;
+    letter-spacing: 0.02em;
+  }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .btn-primary { background: var(--amber); color: #221803; font-weight: 600; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-secondary { background: transparent; border-color: var(--panel-border); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+
+  .btn-play { background: var(--teal); color: #05201d; font-weight: 600; }
+  .btn-play:hover:not(:disabled) { opacity: 0.88; }
+
+  .status { font-size: 12px; color: var(--text-dim); margin-top: 14px; min-height: 16px; white-space: pre-line; }
+  .status.error { color: var(--red); }
+  .status.ok { color: var(--teal); }
+
+  .results { display: none; }
+  .stat-row { display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 110px; }
+  .stat .num { font-size: 20px; color: var(--amber); font-weight: 600; }
+  .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+  .preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .preview-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+  .playback-controls { display: flex; gap: 8px; }
+  .playback-controls button { padding: 7px 14px; font-size: 12px; }
+
+  canvas#roll {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+    background: #fafaf6;
+    border: 1px solid var(--panel-border);
+    margin-bottom: 20px;
+  }
+
+  footer { color: var(--text-dim); font-size: 11px; text-align: center; margin-top: 40px; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="tabs">
+    <a href="index.html">MIDI → Text</a>
+    <a href="create-midi.html" class="active">Text → MIDI</a>
+  </nav>
+
+  <header>
+    <p class="eyebrow"><span class="dot"></span>MIDI Utility</p>
+    <h1>Text → MIDI</h1>
+    <p>Upload a .txt file of <strong>onset_seconds, duration_seconds, pitch, velocity</strong> rows (numeric or note-name pitch, e.g. <code>48</code> or <code>C3</code>), build a standard MIDI file entirely in your browser, and preview it back before downloading.</p>
+  </header>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <input type="file" id="fileInput" accept=".txt">
+      <div class="drop-icon">♪ · ♪ · ♪</div>
+      <div class="drop-main">Drop a .txt file here, or click to browse</div>
+      <div class="drop-sub">One note per line: onset,duration,pitch,velocity</div>
+      <div class="filename-tag" id="filenameTag"></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-primary" id="processBtn" disabled>Build MIDI</button>
+      <button class="btn-secondary" id="downloadBtn" disabled>Download .mid</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel results" id="results">
+    <div class="stat-row">
+      <div class="stat"><div class="num" id="statNotes">–</div><div class="label">Notes</div></div>
+      <div class="stat"><div class="num" id="statDuration">–</div><div class="label">Duration</div></div>
+      <div class="stat"><div class="num" id="statPPQ">–</div><div class="label">Ticks / beat</div></div>
+      <div class="stat"><div class="num" id="statTempo">–</div><div class="label">Tempo</div></div>
+    </div>
+
+    <div class="preview-head">
+      <div class="preview-label">Preview (decoded back from the built .mid file)</div>
+      <div class="playback-controls">
+        <button class="btn-play" id="playBtn">▶ Play</button>
+        <button class="btn-secondary" id="stopBtn" disabled>■ Stop</button>
+      </div>
+    </div>
+    <canvas id="roll" height="160"></canvas>
+  </div>
+
+  <footer>Runs client-side · no upload, no server · synthesized preview, not a soundfont render</footer>
+</div>
+
+<script>
+(function(){
+  const TICKS_PER_BEAT = 480;
+  const TEMPO_US = 500000; // 120 BPM
+
+  // ---------- text -> notes ----------
+  function parseTextToNotes(text){
+    const lines = text.split(/\r\n|\r|\n/);
+    const notes = [];
+    const warnings = [];
+    const noteNameRe = /^([A-Ga-g])(#|b)?(-?\d+)$/;
+    const nameToPc = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+    lines.forEach((raw, idx) => {
+      const line = raw.trim();
+      if (!line) return;
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length < 3){ warnings.push(`Line ${idx+1}: not enough fields, skipped.`); return; }
+      const onset = parseFloat(parts[0]);
+      const duration = parseFloat(parts[1]);
+      const pitchToken = parts[2];
+      let velocity = parts.length >= 4 ? parseInt(parts[3],10) : 100;
+      let pitch;
+      const m = pitchToken.match(noteNameRe);
+      if (m){
+        let pc = nameToPc[m[1].toUpperCase()];
+        if (m[2] === '#') pc += 1;
+        if (m[2] === 'b') pc -= 1;
+        const octave = parseInt(m[3],10);
+        pitch = (octave+1)*12 + pc;
+      } else {
+        pitch = parseInt(pitchToken,10);
+      }
+      if (!isFinite(onset) || !isFinite(duration) || !isFinite(pitch)){
+        warnings.push(`Line ${idx+1}: couldn't parse values, skipped.`); return;
+      }
+      if (onset < 0 || duration <= 0){
+        warnings.push(`Line ${idx+1}: invalid onset/duration, skipped.`); return;
+      }
+      pitch = Math.max(0, Math.min(127, Math.round(pitch)));
+      velocity = isFinite(velocity) ? Math.max(1, Math.min(127, Math.round(velocity))) : 100;
+      notes.push({ onset, duration, pitch, velocity });
+    });
+    notes.sort((a,b) => a.onset - b.onset);
+    return { notes, warnings };
+  }
+
+  // ---------- notes -> midi bytes ----------
+  function encodeVLQ(value){
+    let bytes = [value & 0x7f];
+    value = Math.floor(value/128);
+    while (value > 0){
+      bytes.unshift((value & 0x7f) | 0x80);
+      value = Math.floor(value/128);
+    }
+    return bytes;
+  }
+
+  function buildMidi(notes, ticksPerBeat, tempo){
+    const ticksPerSecond = ticksPerBeat / (tempo/1e6);
+    const events = [];
+    notes.forEach(n => {
+      const onTick = Math.round(n.onset * ticksPerSecond);
+      let offTick = Math.round((n.onset + n.duration) * ticksPerSecond);
+      if (offTick <= onTick) offTick = onTick + 1;
+      events.push({ tick: onTick, kind: 1, note: n.pitch, vel: n.velocity });
+      events.push({ tick: offTick, kind: 0, note: n.pitch, vel: 0 });
+    });
+    events.sort((a,b) => a.tick - b.tick || a.kind - b.kind); // offs before ons at same tick
+
+    const trackBytes = [];
+    const push = arr => { for (const b of arr) trackBytes.push(b); };
+    push(encodeVLQ(0));
+    push([0xFF,0x51,0x03,(tempo>>16)&0xFF,(tempo>>8)&0xFF,tempo&0xFF]);
+
+    let prevTick = 0;
+    events.forEach(ev => {
+      const delta = ev.tick - prevTick; prevTick = ev.tick;
+      push(encodeVLQ(delta));
+      const status = ev.kind === 1 ? 0x90 : 0x80;
+      push([status, ev.note & 0x7f, ev.vel & 0x7f]);
+    });
+    push(encodeVLQ(0));
+    push([0xFF,0x2F,0x00]);
+
+    const header = [];
+    const pushStr = (arr,s) => { for (let i=0;i<s.length;i++) arr.push(s.charCodeAt(i)); };
+    pushStr(header,'MThd');
+    header.push(0,0,0,6, 0,0, 0,1, (ticksPerBeat>>8)&0xFF, ticksPerBeat&0xFF);
+
+    const trackHeader = [];
+    pushStr(trackHeader,'MTrk');
+    const len = trackBytes.length;
+    trackHeader.push((len>>>24)&0xFF,(len>>>16)&0xFF,(len>>>8)&0xFF,len&0xFF);
+
+    return new Uint8Array(header.concat(trackHeader, trackBytes));
+  }
+
+  // ---------- midi bytes -> notes (round-trip decode, used for preview) ----------
+  function readVLQ(view, offset){
+    let value = 0, b;
+    do { b = view.getUint8(offset++); value = (value << 7) | (b & 0x7f); } while (b & 0x80);
+    return { value, offset };
+  }
+  function decodeMidi(buffer){
+    const view = new DataView(buffer);
+    let offset = 0;
+    const readStr = len => { let s=''; for(let i=0;i<len;i++) s+=String.fromCharCode(view.getUint8(offset+i)); offset+=len; return s; };
+    readStr(4);
+    const headerLen = view.getUint32(offset); offset += 4;
+    offset += 2;
+    const ntrks = view.getUint16(offset); offset += 2;
+    const division = view.getUint16(offset); offset += 2;
+    offset += (headerLen - 6);
+    const ticksPerBeat = division;
+    const tracks = []; const tempoEvents = [];
+    for (let t=0;t<ntrks;t++){
+      readStr(4);
+      const chunkLen = view.getUint32(offset); offset += 4;
+      const trackEnd = offset + chunkLen;
+      let tick = 0, runningStatus = null; const events = [];
+      while (offset < trackEnd){
+        const vlq = readVLQ(view, offset); offset = vlq.offset; tick += vlq.value;
+        let statusByte = view.getUint8(offset);
+        if (statusByte < 0x80){ statusByte = runningStatus; } else { offset += 1; if (statusByte < 0xF0) runningStatus = statusByte; }
+        if (statusByte === 0xFF){
+          const metaType = view.getUint8(offset); offset += 1;
+          const lv = readVLQ(view, offset); offset = lv.offset;
+          if (metaType === 0x51){ const tempo=(view.getUint8(offset)<<16)|(view.getUint8(offset+1)<<8)|view.getUint8(offset+2); tempoEvents.push({tick,tempo}); }
+          offset += lv.value;
+        } else if (statusByte === 0xF0 || statusByte === 0xF7){
+          const lv = readVLQ(view, offset); offset = lv.offset; offset += lv.value;
+        } else {
+          const hi = statusByte & 0xF0;
+          if (hi===0x90||hi===0x80||hi===0xA0||hi===0xB0||hi===0xE0){
+            const d1=view.getUint8(offset); offset+=1; const d2=view.getUint8(offset); offset+=1;
+            if (hi===0x90 && d2>0) events.push({tick,type:'on',note:d1,velocity:d2});
+            else if (hi===0x80 || (hi===0x90 && d2===0)) events.push({tick,type:'off',note:d1});
+          } else if (hi===0xC0||hi===0xD0){ offset+=1; } else { offset+=2; }
+        }
+      }
+      offset = trackEnd;
+      tracks.push(events);
+    }
+    tempoEvents.sort((a,b)=>a.tick-b.tick);
+    if (tempoEvents.length===0 || tempoEvents[0].tick>0) tempoEvents.unshift({tick:0,tempo:500000});
+    const segments = []; let cumSec = 0;
+    for (let i=0;i<tempoEvents.length;i++){
+      const cur = tempoEvents[i];
+      segments.push({tick:cur.tick, sec:cumSec, tempo:cur.tempo});
+      const nextTick = (i+1<tempoEvents.length) ? tempoEvents[i+1].tick : null;
+      if (nextTick !== null) cumSec += ((nextTick-cur.tick)*cur.tempo)/1e6/ticksPerBeat;
+    }
+    function tickToSeconds(tick){
+      let seg = segments[0];
+      for (let i=0;i<segments.length;i++){ if (segments[i].tick<=tick) seg=segments[i]; else break; }
+      return seg.sec + ((tick-seg.tick)*seg.tempo)/1e6/ticksPerBeat;
+    }
+    const outNotes = [];
+    for (const events of tracks){
+      const active = new Map();
+      for (const ev of events){
+        if (ev.type==='on'){ const st=active.get(ev.note)||[]; st.push({tick:ev.tick,velocity:ev.velocity}); active.set(ev.note,st); }
+        else if (ev.type==='off'){
+          const st = active.get(ev.note);
+          if (st && st.length){
+            const s = st.shift();
+            outNotes.push({ onset: tickToSeconds(s.tick), duration: tickToSeconds(ev.tick)-tickToSeconds(s.tick), pitch: ev.note, velocity: s.velocity });
+          }
+        }
+      }
+    }
+    outNotes.sort((a,b)=>a.onset-b.onset);
+    return { notes: outNotes, ticksPerBeat, tempo: tempoEvents[0].tempo };
+  }
+
+  // ---------- UI wiring ----------
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const filenameTag = document.getElementById('filenameTag');
+  const processBtn = document.getElementById('processBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const playBtn = document.getElementById('playBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const statusEl = document.getElementById('status');
+  const results = document.getElementById('results');
+  const canvas = document.getElementById('roll');
+
+  let currentFile = null;
+  let currentMidiBytes = null;
+  let currentMidiBlob = null;
+  let previewNotes = null;
+
+  let audioCtx = null;
+  let activeOscillators = [];
+  let playhead = { active:false, startTime:0, maxTime:0 };
+  let rafId = null;
+
+  function setStatus(msg, kind){
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function resetResults(){
+    results.style.display = 'none';
+    downloadBtn.disabled = true;
+    currentMidiBytes = null;
+    currentMidiBlob = null;
+    previewNotes = null;
+    stopPlayback();
+  }
+
+  function handleFile(file){
+    if (!file) return;
+    if (!/\.txt$/i.test(file.name)){
+      setStatus("That doesn't look like a .txt file.", 'error');
+      return;
+    }
+    currentFile = file;
+    filenameTag.style.display = 'block';
+    filenameTag.textContent = file.name + '  ·  ' + (file.size/1024).toFixed(1) + ' KB';
+    processBtn.disabled = false;
+    resetResults();
+    setStatus('Ready to build.');
+  }
+
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+  ['dragenter','dragover'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+
+  function drawRoll(notes, playheadTime){
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || 700;
+    const cssHeight = 160;
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0,0,cssWidth,cssHeight);
+    if (!notes.length) return;
+
+    const maxOnset = Math.max(...notes.map(n => n.onset + n.duration)) || 1;
+    let minPitch = Math.min(...notes.map(n => n.pitch));
+    let maxPitch = Math.max(...notes.map(n => n.pitch));
+    if (minPitch === maxPitch){ minPitch -= 1; maxPitch += 1; }
+    const padY = 10;
+
+    ctx.fillStyle = 'rgba(201,130,31,0.85)';
+    for (const n of notes){
+      const x = (n.onset / maxOnset) * (cssWidth - 4) + 2;
+      const w = Math.max(1.2, (n.duration / maxOnset) * (cssWidth - 4));
+      const y = padY + (1 - (n.pitch - minPitch) / (maxPitch - minPitch)) * (cssHeight - padY*2);
+      ctx.fillRect(x, y, w, 2.2);
+    }
+
+    if (playheadTime !== undefined && playheadTime !== null){
+      const px = (playheadTime / maxOnset) * (cssWidth - 4) + 2;
+      ctx.strokeStyle = 'rgba(47,143,134,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, cssHeight);
+      ctx.stroke();
+    }
+  }
+
+  function process(){
+    if (!currentFile) return;
+    setStatus('Reading file…');
+    processBtn.disabled = true;
+
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        const { notes, warnings } = parseTextToNotes(e.target.result);
+        if (!notes.length){
+          setStatus('No valid note rows found in this file.' + (warnings.length ? '\n' + warnings.slice(0,5).join('\n') : ''), 'error');
+          processBtn.disabled = false;
+          return;
+        }
+
+        currentMidiBytes = buildMidi(notes, TICKS_PER_BEAT, TEMPO_US);
+        currentMidiBlob = new Blob([currentMidiBytes], { type: 'audio/midi' });
+
+        // decode what we just built, so the preview reflects the actual file, not just the source notes
+        const decoded = decodeMidi(currentMidiBytes.buffer);
+        previewNotes = decoded.notes;
+
+        const totalDuration = previewNotes.reduce((max,n) => Math.max(max, n.onset+n.duration), 0);
+        document.getElementById('statNotes').textContent = previewNotes.length;
+        document.getElementById('statDuration').textContent = totalDuration.toFixed(1) + 's';
+        document.getElementById('statPPQ').textContent = decoded.ticksPerBeat;
+        document.getElementById('statTempo').textContent = Math.round(60e6/decoded.tempo) + ' BPM';
+
+        drawRoll(previewNotes);
+        results.style.display = 'block';
+        downloadBtn.disabled = false;
+
+        let msg = `Built a MIDI file with ${previewNotes.length} notes.`;
+        if (warnings.length) msg += `\n${warnings.length} line(s) skipped — ` + warnings.slice(0,3).join(' ');
+        setStatus(msg, 'ok');
+      } catch (err){
+        console.error(err);
+        setStatus('Could not build a MIDI file: ' + err.message, 'error');
+      } finally {
+        processBtn.disabled = false;
+      }
+    };
+    reader.onerror = function(){
+      setStatus('Failed to read the file.', 'error');
+      processBtn.disabled = false;
+    };
+    reader.readAsText(currentFile);
+  }
+
+  processBtn.addEventListener('click', process);
+
+  downloadBtn.addEventListener('click', () => {
+    if (!currentMidiBlob || !currentFile) return;
+    const base = currentFile.name.replace(/\.txt$/i, '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(currentMidiBlob);
+    a.download = base + '.mid';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  });
+
+  // ---------- playback (Web Audio synth preview) ----------
+  function stopPlayback(){
+    activeOscillators.forEach(osc => { try { osc.stop(); } catch(e){} });
+    activeOscillators = [];
+    playhead.active = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    playBtn.disabled = false;
+    stopBtn.disabled = true;
+    if (previewNotes) drawRoll(previewNotes);
+  }
+
+  function playPreview(){
+    if (!previewNotes || !previewNotes.length) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    stopPlayback();
+
+    const startTime = audioCtx.currentTime + 0.05;
+    const maxTime = Math.max(...previewNotes.map(n => n.onset + n.duration));
+
+    previewNotes.forEach(n => {
+      const osc = audioCtx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+      const gain = audioCtx.createGain();
+      const peak = Math.min(0.28, (n.velocity/127) * 0.3);
+      const t0 = startTime + n.onset;
+      const t1 = t0 + Math.max(n.duration, 0.05);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(peak, t0 + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t1);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t1 + 0.02);
+      activeOscillators.push(osc);
+    });
+
+    playhead = { active: true, startTime, maxTime };
+    playBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    function tick(){
+      if (!playhead.active) return;
+      const elapsed = audioCtx.currentTime - playhead.startTime;
+      if (elapsed >= playhead.maxTime + 0.05){
+        stopPlayback();
+        return;
+      }
+      drawRoll(previewNotes, Math.max(0, elapsed));
+      rafId = requestAnimationFrame(tick);
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  playBtn.addEventListener('click', playPreview);
+  stopBtn.addEventListener('click', stopPlayback);
+
+  window.addEventListener('resize', () => { if (previewNotes) drawRoll(previewNotes); });
+})();
+</script>
+</body>
+</html>

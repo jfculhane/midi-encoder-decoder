@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI → Text</title>
+<style>
+  :root{
+    --bg: #0e0e11;
+    --panel: #17171c;
+    --panel-border: #2a2a32;
+    --text: #e9e8e4;
+    --text-dim: #8d8b96;
+    --amber: #e8a33d;
+    --teal: #4fa8a0;
+    --red: #d9614f;
+    --mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+  }
+  body {
+    background-image:
+      linear-gradient(var(--panel-border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--panel-border) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+    background-color: var(--bg);
+    opacity: 1;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 28px;
+  }
+  nav.tabs a {
+    text-decoration: none;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    padding: 8px 14px;
+    border-radius: 6px;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+  }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.active {
+    background: var(--panel);
+    border-color: var(--panel-border);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  header {
+    margin-bottom: 36px;
+  }
+  .eyebrow {
+    color: var(--amber);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 8px var(--amber);
+  }
+  h1 {
+    font-size: 26px;
+    margin: 0 0 10px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 0;
+    max-width: 56ch;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+
+  /* dropzone */
+  .drop {
+    border: 1.5px dashed var(--panel-border);
+    border-radius: 8px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+    position: relative;
+  }
+  .drop:hover, .drop.drag {
+    border-color: var(--amber);
+    background: rgba(232, 163, 61, 0.04);
+  }
+  .drop input { display: none; }
+  .drop-icon {
+    font-size: 22px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    letter-spacing: 0.3em;
+  }
+  .drop-main { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+  .drop-sub { font-size: 12px; color: var(--text-dim); }
+  .filename-tag {
+    display: none;
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: var(--teal);
+    background: rgba(79,168,160,0.08);
+    border: 1px solid rgba(79,168,160,0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  /* controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    user-select: none;
+    cursor: pointer;
+  }
+  .opt input { accent-color: var(--amber); width: 14px; height: 14px; }
+
+  button {
+    font-family: var(--mono);
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 11px 20px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: opacity .15s ease, transform .05s ease;
+    letter-spacing: 0.02em;
+  }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--amber);
+    color: #171208;
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--panel-border);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+
+  /* status line */
+  .status {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 14px;
+    min-height: 16px;
+  }
+  .status.error { color: var(--red); }
+  .status.ok { color: var(--teal); }
+
+  /* results */
+  .results { display: none; }
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    flex: 1;
+    min-width: 110px;
+  }
+  .stat .num {
+    font-size: 20px;
+    color: var(--amber);
+    font-weight: 600;
+  }
+  .stat .label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  canvas#roll {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+    background: #0b0b0e;
+    border: 1px solid var(--panel-border);
+    margin-bottom: 20px;
+  }
+
+  .preview-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  textarea#preview {
+    width: 100%;
+    height: 180px;
+    resize: vertical;
+    background: #0b0b0e;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+  }
+
+  footer {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-align: center;
+    margin-top: 40px;
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="tabs">
+    <a href="index.html" class="active">MIDI → Text</a>
+    <a href="create-midi.html">Text → MIDI</a>
+  </nav>
+
+  <header>
+    <p class="eyebrow"><span class="dot"></span>MIDI Utility</p>
+    <h1>MIDI → Text</h1>
+    <p>Upload a .mid file, parse it entirely in your browser, and download a plain-text listing of every note as <strong>onset_seconds, duration_seconds, pitch, velocity</strong>. Nothing leaves this page.</p>
+  </header>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <input type="file" id="fileInput" accept=".mid,.midi">
+      <div class="drop-icon">♪ · ♪ · ♪</div>
+      <div class="drop-main">Drop a .mid file here, or click to browse</div>
+      <div class="drop-sub">Standard MIDI files (format 0 or 1)</div>
+      <div class="filename-tag" id="filenameTag"></div>
+    </div>
+
+    <div class="controls">
+      <label class="opt">
+        <input type="checkbox" id="noteNameToggle">
+        Output note names (C3) instead of numeric pitch
+      </label>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-primary" id="processBtn" disabled>Process file</button>
+        <button class="btn-secondary" id="downloadBtn" disabled>Download .txt</button>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel results" id="results">
+    <div class="stat-row">
+      <div class="stat"><div class="num" id="statNotes">–</div><div class="label">Notes</div></div>
+      <div class="stat"><div class="num" id="statDuration">–</div><div class="label">Duration</div></div>
+      <div class="stat"><div class="num" id="statTracks">–</div><div class="label">Tracks</div></div>
+      <div class="stat"><div class="num" id="statPPQ">–</div><div class="label">Ticks / beat</div></div>
+    </div>
+
+    <canvas id="roll" height="160"></canvas>
+
+    <div class="preview-label">Output preview (first 40 lines)</div>
+    <textarea id="preview" readonly></textarea>
+  </div>
+
+  <footer>Runs client-side · no upload, no server</footer>
+</div>
+
+<script>
+(function(){
+  const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  function noteName(n){
+    const octave = Math.floor(n/12) - 1;
+    return NOTE_NAMES[n % 12] + octave;
+  }
+
+  function readVLQ(view, offset){
+    let value = 0, b;
+    do {
+      b = view.getUint8(offset++);
+      value = (value << 7) | (b & 0x7f);
+    } while (b & 0x80);
+    return { value, offset };
+  }
+
+  function parseMidi(buffer){
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    function readStr(len){
+      let s = '';
+      for (let i=0;i<len;i++) s += String.fromCharCode(view.getUint8(offset+i));
+      offset += len;
+      return s;
+    }
+
+    if (readStr(4) !== 'MThd') throw new Error('Not a valid MIDI file (missing MThd header)');
+    const headerLen = view.getUint32(offset); offset += 4;
+    const format = view.getUint16(offset); offset += 2;
+    const ntrks = view.getUint16(offset); offset += 2;
+    const division = view.getUint16(offset); offset += 2;
+    offset += (headerLen - 6);
+
+    if (division & 0x8000) throw new Error('SMPTE time-coded MIDI files are not supported');
+    const ticksPerBeat = division;
+
+    const tracks = [];
+    const tempoEvents = [];
+
+    for (let t=0; t<ntrks; t++){
+      const chunkType = readStr(4);
+      const chunkLen = view.getUint32(offset); offset += 4;
+      const trackEnd = offset + chunkLen;
+      if (chunkType !== 'MTrk'){ offset = trackEnd; continue; }
+
+      let tick = 0;
+      let runningStatus = null;
+      const events = [];
+
+      while (offset < trackEnd){
+        const vlq = readVLQ(view, offset); offset = vlq.offset;
+        tick += vlq.value;
+
+        let statusByte = view.getUint8(offset);
+        if (statusByte < 0x80){
+          statusByte = runningStatus;
+        } else {
+          offset += 1;
+          if (statusByte < 0xF0) runningStatus = statusByte;
+        }
+
+        if (statusByte === 0xFF){
+          const metaType = view.getUint8(offset); offset += 1;
+          const lenVlq = readVLQ(view, offset); offset = lenVlq.offset;
+          const len = lenVlq.value;
+          if (metaType === 0x51){
+            const tempo = (view.getUint8(offset) << 16) | (view.getUint8(offset+1) << 8) | view.getUint8(offset+2);
+            tempoEvents.push({ tick, tempo });
+          }
+          offset += len;
+        } else if (statusByte === 0xF0 || statusByte === 0xF7){
+          const lenVlq = readVLQ(view, offset); offset = lenVlq.offset;
+          offset += lenVlq.value;
+        } else {
+          const hi = statusByte & 0xF0;
+          if (hi === 0x90 || hi === 0x80 || hi === 0xA0 || hi === 0xB0 || hi === 0xE0){
+            const d1 = view.getUint8(offset); offset += 1;
+            const d2 = view.getUint8(offset); offset += 1;
+            if (hi === 0x90 && d2 > 0){
+              events.push({ tick, type:'on', note:d1, velocity:d2 });
+            } else if (hi === 0x80 || (hi === 0x90 && d2 === 0)){
+              events.push({ tick, type:'off', note:d1 });
+            }
+          } else if (hi === 0xC0 || hi === 0xD0){
+            offset += 1;
+          } else {
+            offset += 2;
+          }
+        }
+      }
+      offset = trackEnd;
+      tracks.push(events);
+    }
+
+    tempoEvents.sort((a,b)=>a.tick-b.tick);
+    if (tempoEvents.length === 0 || tempoEvents[0].tick > 0){
+      tempoEvents.unshift({ tick:0, tempo:500000 });
+    }
+
+    const segments = [];
+    let cumSec = 0;
+    for (let i=0;i<tempoEvents.length;i++){
+      const cur = tempoEvents[i];
+      segments.push({ tick:cur.tick, sec:cumSec, tempo:cur.tempo });
+      const nextTick = (i+1 < tempoEvents.length) ? tempoEvents[i+1].tick : null;
+      if (nextTick !== null){
+        cumSec += ((nextTick - cur.tick) * cur.tempo) / 1e6 / ticksPerBeat;
+      }
+    }
+
+    function tickToSeconds(tick){
+      let seg = segments[0];
+      for (let i=0;i<segments.length;i++){
+        if (segments[i].tick <= tick) seg = segments[i]; else break;
+      }
+      return seg.sec + ((tick - seg.tick) * seg.tempo) / 1e6 / ticksPerBeat;
+    }
+
+    const notes = [];
+    for (const events of tracks){
+      const active = new Map();
+      for (const ev of events){
+        if (ev.type === 'on'){
+          const stack = active.get(ev.note) || [];
+          stack.push({ tick: ev.tick, velocity: ev.velocity });
+          active.set(ev.note, stack);
+        } else if (ev.type === 'off'){
+          const stack = active.get(ev.note);
+          if (stack && stack.length){
+            const start = stack.shift();
+            const onsetSec = tickToSeconds(start.tick);
+            const offsetSec = tickToSeconds(ev.tick);
+            notes.push({
+              onset: onsetSec,
+              duration: offsetSec - onsetSec,
+              pitch: ev.note,
+              velocity: start.velocity
+            });
+          }
+        }
+      }
+    }
+
+    notes.sort((a,b)=>a.onset-b.onset);
+    return { notes, ticksPerBeat, trackCount: tracks.length, format };
+  }
+
+  // ---- UI wiring ----
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const filenameTag = document.getElementById('filenameTag');
+  const processBtn = document.getElementById('processBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const statusEl = document.getElementById('status');
+  const results = document.getElementById('results');
+  const preview = document.getElementById('preview');
+  const noteNameToggle = document.getElementById('noteNameToggle');
+  const canvas = document.getElementById('roll');
+
+  let currentFile = null;
+  let currentNotes = null;
+  let currentTextBlob = null;
+  let parsedMeta = null;
+
+  function setStatus(msg, kind){
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function resetResults(){
+    results.style.display = 'none';
+    downloadBtn.disabled = true;
+    currentNotes = null;
+    currentTextBlob = null;
+  }
+
+  function handleFile(file){
+    if (!file) return;
+    const okExt = /\.(mid|midi)$/i.test(file.name);
+    if (!okExt){
+      setStatus('That doesn\'t look like a .mid or .midi file.', 'error');
+      return;
+    }
+    currentFile = file;
+    filenameTag.style.display = 'block';
+    filenameTag.textContent = file.name + '  ·  ' + (file.size/1024).toFixed(1) + ' KB';
+    processBtn.disabled = false;
+    resetResults();
+    setStatus('Ready to process.');
+  }
+
+  drop.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+  ['dragenter','dragover'].forEach(evt => {
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(evt => {
+    drop.addEventListener(evt, (e) => { e.preventDefault(); drop.classList.remove('drag'); });
+  });
+  drop.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  function formatLine(n, useNoteNames){
+    const pitch = useNoteNames ? noteName(n.pitch) : n.pitch;
+    return `${n.onset.toFixed(3)},${n.duration.toFixed(3)},${pitch},${n.velocity}`;
+  }
+
+  function drawRoll(notes){
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.clientWidth || 700;
+    const cssHeight = 160;
+    canvas.width = cssWidth * dpr;
+    canvas.height = cssHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0,0,cssWidth,cssHeight);
+
+    if (!notes.length) return;
+
+    const maxOnset = Math.max(...notes.map(n => n.onset + n.duration));
+    let minPitch = Math.min(...notes.map(n => n.pitch));
+    let maxPitch = Math.max(...notes.map(n => n.pitch));
+    if (minPitch === maxPitch){ minPitch -= 1; maxPitch += 1; }
+    const padY = 10;
+
+    ctx.fillStyle = 'rgba(232,163,61,0.85)';
+    for (const n of notes){
+      const x = (n.onset / maxOnset) * (cssWidth - 4) + 2;
+      const w = Math.max(1.2, (n.duration / maxOnset) * (cssWidth - 4));
+      const y = padY + (1 - (n.pitch - minPitch) / (maxPitch - minPitch)) * (cssHeight - padY*2);
+      ctx.fillRect(x, y, w, 2.2);
+    }
+  }
+
+  function process(){
+    if (!currentFile) return;
+    setStatus('Reading file…');
+    processBtn.disabled = true;
+
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        const parsed = parseMidi(e.target.result);
+        currentNotes = parsed.notes;
+        parsedMeta = parsed;
+
+        if (!parsed.notes.length){
+          setStatus('Parsed the file, but found no note events.', 'error');
+          processBtn.disabled = false;
+          return;
+        }
+
+        const useNoteNames = noteNameToggle.checked;
+        const lines = parsed.notes.map(n => formatLine(n, useNoteNames));
+        const fullText = lines.join('\n') + '\n';
+        currentTextBlob = new Blob([fullText], { type: 'text/plain' });
+
+        // stats
+        const totalDuration = parsed.notes.reduce((max,n) => Math.max(max, n.onset+n.duration), 0);
+        document.getElementById('statNotes').textContent = parsed.notes.length;
+        document.getElementById('statDuration').textContent = totalDuration.toFixed(1) + 's';
+        document.getElementById('statTracks').textContent = parsed.trackCount;
+        document.getElementById('statPPQ').textContent = parsed.ticksPerBeat;
+
+        preview.value = lines.slice(0, 40).join('\n');
+        drawRoll(parsed.notes);
+
+        results.style.display = 'block';
+        downloadBtn.disabled = false;
+        setStatus(`Parsed ${parsed.notes.length} notes successfully.`, 'ok');
+      } catch (err){
+        console.error(err);
+        setStatus('Could not parse this file: ' + err.message, 'error');
+      } finally {
+        processBtn.disabled = false;
+      }
+    };
+    reader.onerror = function(){
+      setStatus('Failed to read the file.', 'error');
+      processBtn.disabled = false;
+    };
+    reader.readAsArrayBuffer(currentFile);
+  }
+
+  processBtn.addEventListener('click', process);
+
+  // re-process formatting only (no re-parse) when the note-name toggle changes, if we already have notes
+  noteNameToggle.addEventListener('change', () => {
+    if (!currentNotes) return;
+    const useNoteNames = noteNameToggle.checked;
+    const lines = currentNotes.map(n => formatLine(n, useNoteNames));
+    const fullText = lines.join('\n') + '\n';
+    currentTextBlob = new Blob([fullText], { type: 'text/plain' });
+    preview.value = lines.slice(0, 40).join('\n');
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!currentTextBlob || !currentFile) return;
+    const base = currentFile.name.replace(/\.(mid|midi)$/i, '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(currentTextBlob);
+    a.download = base + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  });
+
+  window.addEventListener('resize', () => { if (currentNotes) drawRoll(currentNotes); });
+})();
+</script>
+</body>
+</html>
